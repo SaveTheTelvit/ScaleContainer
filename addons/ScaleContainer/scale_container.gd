@@ -12,7 +12,11 @@ enum ContentScale {
 	NULL
 }
 
-const MASK: Dictionary = { BUTTON_LEFT : BUTTON_MASK_LEFT, BUTTON_RIGHT : BUTTON_MASK_RIGHT, BUTTON_MIDDLE: BUTTON_MASK_MIDDLE }
+const MASK: Dictionary = {
+	BUTTON_LEFT : BUTTON_MASK_LEFT,
+	BUTTON_RIGHT : BUTTON_MASK_RIGHT,
+	BUTTON_MIDDLE: BUTTON_MASK_MIDDLE
+}
 
 var _scroll: Vector2 = Vector2.ZERO
 var _min_scroll_zone: Vector2 = Vector2.ZERO
