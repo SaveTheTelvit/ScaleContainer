@@ -312,7 +312,7 @@ func on_screen_touch(index: int, pressed: bool, position: Vector2) -> void:
 		touches.erase(index)
 		if !untouched: untouched = true
 		if touches.size() == 0: 
-			emit_signal("untouched")
+			emit_signal("drag_ended")
 			world_anchor = Vector2.INF
 			if !_hard_bounds: to_standard(_touch_await_time)
 
