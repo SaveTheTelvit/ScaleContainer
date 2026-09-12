@@ -1,6 +1,8 @@
 @tool
-class_name ScaleContainer
+
 extends Container
+
+class_name ScaleContainer
 
 signal drag_started
 signal drag_ended
@@ -17,25 +19,25 @@ const MASK: Dictionary = {
 	MOUSE_BUTTON_MIDDLE: MOUSE_BUTTON_MASK_MIDDLE
 }
 
-var _scroll: Vector2 = Vector2.ZERO
-var _min_scroll_zone: Vector2 = Vector2.ZERO
-var _max_scroll_zone: Vector2 = Vector2.ZERO
-var _scale: float = 1.0
-var _min_scale: float = 0.1
-var _max_scale: float = 100
-var _scale_on_content: int = ContentScale.NULL
-var _scroll_mouse_button: int = 0b111
-var _one_finger_scrolling: bool = true
-var _drag_alpha: float = 0.9
-var _hard_bounds: bool = false
-var _returning_time: float = 0.2
-var _mouse_await_time: float = 0.2
-var _touch_await_time: float = 0.0
+var scroll: Vector2 = Vector2.ZERO
+var min_scroll_zone: Vector2 = Vector2.ZERO
+var max_scroll_zone: Vector2 = Vector2.ZERO
+var content_scale: float = 1.0
+var min_scale: float = 0.1
+var max_scale: float = 100
+var scale_on_content: int = ContentScale.NULL
+var scroll_mouse_button: int = 0b111
+var one_finger_scrolling: bool = true
+var no_drag_on_three: bool = true
+var drag_alpha: float = 0.9
+var hard_bounds: bool = false
+var returning_time: float = 0.2
+var mouse_await_time: float = 0.2
+var touch_await_time: float = 0.0
 
 var touches: Dictionary = {}
 var dragging: bool = false
 var pressed: int = 0
-var untouched: bool = true
 var world_anchor: Vector2 = Vector2.INF
 var start_dist: float = 0.0
 var base_scale: float = 0.0
@@ -43,6 +45,7 @@ var mouse_exited_flag: bool = false
 var offset: Vector2 = Vector2.ZERO
 var tween: Tween = null
 var current_key_pressed: int = -1
+var last_scale_target: Vector2 = Vector2.ZERO
 
 func _get_property_list() -> Array:
 	return [
@@ -110,6 +113,13 @@ func _get_property_list() -> Array:
 			"hint_string": ""
 		},
 		{
+			"name": "Controls/no_drag_on_three",
+			"type": TYPE_BOOL,
+			"usage": PROPERTY_USAGE_DEFAULT,
+			"hint": PROPERTY_HINT_NONE,
+			"hint_string": ""
+		},
+		{
 			"name": "Controls/drag_alpha",
 			"type": TYPE_FLOAT,
 			"usage": PROPERTY_USAGE_DEFAULT,
@@ -148,65 +158,69 @@ func _get_property_list() -> Array:
 
 func _get(property: StringName) -> Variant:
 	match String(property):
-		"Scroll/scroll": return _scroll
-		"Scroll/min_scroll_zone": return _min_scroll_zone
-		"Scroll/max_scroll_zone": return _max_scroll_zone
-		"Scale/scale": return _scale
-		"Scale/min_scale": return _min_scale
-		"Scale/max_scale": return _max_scale
-		"Scale/scale_on_content": return _scale_on_content
-		"Controls/scroll_mouse_button": return _scroll_mouse_button
-		"Controls/one_finger_scrolling": return _one_finger_scrolling
-		"Controls/drag_alpha": return _drag_alpha
-		"Bound/hard_bounds": return _hard_bounds
-		"Bound/returning_time": return _returning_time
-		"Bound/mouse_await_time": return _mouse_await_time
-		"Bound/touch_await_time": return _touch_await_time
+		"Scroll/scroll": return scroll
+		"Scroll/min_scroll_zone": return min_scroll_zone
+		"Scroll/max_scroll_zone": return max_scroll_zone
+		"Scale/scale": return content_scale
+		"Scale/min_scale": return min_scale
+		"Scale/max_scale": return max_scale
+		"Scale/scale_on_content": return scale_on_content
+		"Controls/scroll_mouse_button": return scroll_mouse_button
+		"Controls/one_finger_scrolling": return one_finger_scrolling
+		"Controls/no_drag_on_three": return no_drag_on_three
+		"Controls/drag_alpha": return drag_alpha
+		"Bound/hard_bounds": return hard_bounds
+		"Bound/returning_time": return returning_time
+		"Bound/mouse_await_time": return mouse_await_time
+		"Bound/touch_await_time": return touch_await_time
 	return null
 
 func _set(property: StringName, value: Variant) -> bool:
 	match String(property):
 		"Scroll/scroll":
-			_scroll = value
+			scroll = value
 			return true
 		"Scroll/min_scroll_zone":
-			_min_scroll_zone = value
+			min_scroll_zone = value
 			return true
 		"Scroll/max_scroll_zone":
-			_max_scroll_zone = value
+			max_scroll_zone = value
 			return true
 		"Scale/scale":
-			_scale = value
+			content_scale = value
 			return true
 		"Scale/min_scale":
-			_min_scale = value
+			min_scale = value
 			return true
 		"Scale/max_scale":
-			_max_scale = value
+			max_scale = value
 			return true
 		"Scale/scale_on_content":
-			_scale_on_content = value
+			scale_on_content = value
 			return true
 		"Controls/scroll_mouse_button":
-			_scroll_mouse_button = value
+			scroll_mouse_button = value
 			return true
 		"Controls/one_finger_scrolling":
-			_one_finger_scrolling = value
+			one_finger_scrolling = value
+			return true
+		"Controls/no_drag_on_three":
+			no_drag_on_three = value
 			return true
 		"Controls/drag_alpha":
-			_drag_alpha = value
+			drag_alpha = value
 			return true
 		"Bound/hard_bounds":
-			_hard_bounds = value
+			hard_bounds = value
 			return true
 		"Bound/returning_time":
-			_returning_time = value
+			returning_time = value
 			return true
 		"Bound/mouse_await_time":
-			_mouse_await_time = value
+			mouse_await_time = value
 			return true
 		"Bound/touch_await_time":
-			_touch_await_time = value
+			touch_await_time = value
 			return true
 	return false
 
@@ -214,12 +228,12 @@ func _notification(what: int) -> void:
 	match what:
 		NOTIFICATION_READY:
 			clip_contents = true
-			offset = get_container_offset(_scale)
+			offset = get_container_offset(content_scale)
 			update_scroll_on_real()
 			force_standard()
 		NOTIFICATION_SORT_CHILDREN:
 			if world_anchor == Vector2.INF:
-				if _hard_bounds: force_standard()
+				if hard_bounds: force_standard()
 				else: to_standard(0)
 		NOTIFICATION_WM_MOUSE_ENTER: mouse_exited_flag = false
 		NOTIFICATION_WM_MOUSE_EXIT: mouse_exited_flag = true
@@ -228,31 +242,34 @@ func _gui_input(event: InputEvent) -> void:
 	if event is InputEventMouseButton:
 		match event.button_index:
 			MOUSE_BUTTON_WHEEL_UP:
-				update_container(_scale * 1.1, event.position)
-				if !_hard_bounds: to_standard(_mouse_await_time)
+				update_container(content_scale * 1.1, event.position)
+				last_scale_target = event.position
+				if !hard_bounds: to_standard(mouse_await_time)
 			MOUSE_BUTTON_WHEEL_DOWN:
-				update_container(_scale / 1.1, event.position)
-				if !_hard_bounds: to_standard(_mouse_await_time)
-		if !has_button(_scroll_mouse_button, event.button_index): return
+				update_container(content_scale / 1.1, event.position)
+				last_scale_target = event.position
+				if !hard_bounds: to_standard(mouse_await_time)
+		if !has_button(scroll_mouse_button, event.button_index): return
 		if event.pressed:
 			if !pressed: world_anchor = screen_to_world(event.position - offset)
 			set_pressed(event.button_index, true)
-			if !_hard_bounds: returning_stop()
+			if !hard_bounds: returning_stop()
 		else:
 			set_pressed(event.button_index, false)
 			if !pressed: world_anchor = Vector2.INF
 			if dragging:
 				dragging = false
 				drag_ended.emit()
-			if !_hard_bounds: to_standard(_mouse_await_time)
+			if !hard_bounds: to_standard(mouse_await_time)
 	elif event is InputEventMouseMotion:
 		if world_anchor == Vector2.INF: return
-		var new_scroll: Vector2 = world_anchor * _scale - event.position + offset
-		if _hard_bounds: new_scroll = minmax_scroll(new_scroll, _scale)
-		if !dragging && (new_scroll - _scroll).length() > 2.5:
+		var new_scroll: Vector2 = world_anchor * content_scale - event.position + offset
+		last_scale_target = event.position
+		if hard_bounds: new_scroll = minmax_scroll(new_scroll, content_scale)
+		if !dragging && (new_scroll - scroll).length() > 2.5:
 			dragging = true
 			drag_started.emit()
-		set_view(_scale, new_scroll)
+		set_view(content_scale, new_scroll)
 
 func _input(event: InputEvent) -> void:
 	if event is InputEventKey:
@@ -264,27 +281,29 @@ func _input(event: InputEvent) -> void:
 					if event.echo:
 						if current_key_pressed != event.physical_keycode: return
 					else: current_key_pressed = event.physical_keycode
-					if !_hard_bounds: returning_stop()
+					if !hard_bounds: returning_stop()
 					if pressed && world_anchor != Vector2.INF:
-						set_scale_witch_anchor(_scale / 1.1, point)
-					else: update_container(_scale / 1.1, point)
+						set_scale_wtch_anchor(content_scale / 1.1, point)
+					else: update_container(content_scale / 1.1, point)
+					last_scale_target = point
 				KEY_EQUAL:
 					if event.echo:
 						if current_key_pressed != event.physical_keycode: return
 					else: current_key_pressed = event.physical_keycode
-					if !_hard_bounds: returning_stop()
+					if !hard_bounds: returning_stop()
 					if pressed && world_anchor != Vector2.INF:
-						set_scale_witch_anchor(_scale * 1.1, point)
-					else: update_container(_scale * 1.1, point)
+						set_scale_wtch_anchor(content_scale * 1.1, point)
+					else: update_container(content_scale * 1.1, point)
+					last_scale_target = point
 				_:
 					if !event.echo:
-						if !_hard_bounds && world_anchor == Vector2.INF: to_standard(_mouse_await_time)
+						if !hard_bounds && world_anchor == Vector2.INF: to_standard(mouse_await_time)
 						current_key_pressed = -1
 		else:
 			match event.physical_keycode:
 				KEY_MINUS, KEY_EQUAL:
 					if current_key_pressed == event.physical_keycode:
-						if !_hard_bounds && world_anchor == Vector2.INF: to_standard(_mouse_await_time)
+						if !hard_bounds && world_anchor == Vector2.INF: to_standard(mouse_await_time)
 						current_key_pressed = -1
 	elif event is InputEventScreenTouch:
 		var point: Vector2 = to_local(event.position)
@@ -300,35 +319,40 @@ func _input(event: InputEvent) -> void:
 func on_screen_touch(index: int, is_pressed: bool, position: Vector2) -> void:
 	if is_pressed:
 		touches[index] = position
-		if !_hard_bounds: returning_stop()
+		if !hard_bounds: returning_stop()
 		match touches.size():
 			1:
-				untouched = false
 				dragging = false
 				world_anchor = screen_to_world(position - offset)
-			2: start_scale_touch()
+			_:
+				start_scale_touch()
 	else:
 		touches.erase(index)
-		if !untouched: untouched = true
-		if touches.size() == 0:
-			drag_ended.emit()
-			world_anchor = Vector2.INF
-			if !_hard_bounds: to_standard(_touch_await_time)
+		match touches.size():
+			0:
+				drag_ended.emit()
+				world_anchor = Vector2.INF
+				if !hard_bounds: to_standard(touch_await_time)
+			1:
+				world_anchor = screen_to_world(get_touch(0) - offset)
+			_:
+				start_scale_touch()
 
 func on_screen_drag(index: int, position: Vector2) -> void:
-	if untouched: return
 	touches[index] = position
 	match touches.size():
 		1:
-			if !_one_finger_scrolling: return
-			var new_scroll: Vector2 = world_anchor * _scale - position + offset
-			if _hard_bounds: new_scroll = minmax_scroll(new_scroll, _scale)
-			if !dragging && (new_scroll - _scroll).length() > 2.5:
+			if !one_finger_scrolling: return
+			var new_scroll: Vector2 = world_anchor * content_scale - position + offset
+			if hard_bounds: new_scroll = minmax_scroll(new_scroll, content_scale)
+			if !dragging && (new_scroll - scroll).length() > 2.5:
 				dragging = true
 				drag_started.emit()
-			set_view(_scale, new_scroll)
+			set_view(content_scale, new_scroll)
 		2:
 			scale_process()
+		_:
+			if !no_drag_on_three: scale_process()
 
 func start_scale_touch() -> void:
 	var t1: Vector2 = get_touch(0)
@@ -336,7 +360,7 @@ func start_scale_touch() -> void:
 	var center: Vector2 = (t1 + t2) * 0.5 - offset
 	world_anchor = screen_to_world(center)
 	start_dist = t1.distance_to(t2)
-	base_scale = _scale
+	base_scale = content_scale
 
 func scale_process() -> void:
 	if start_dist == 0: return
@@ -349,7 +373,7 @@ func scale_process() -> void:
 	var new_scroll: Vector2
 	var new_offset: Vector2
 	var offset_delta: Vector2
-	if _hard_bounds:
+	if hard_bounds:
 		new_scale = minmax_scale(new_scale)
 		new_offset = get_container_offset(new_scale)
 		offset_delta = new_offset - offset
@@ -358,6 +382,7 @@ func scale_process() -> void:
 		new_offset = get_container_offset(new_scale)
 		offset_delta = new_offset - offset
 		new_scroll = world_anchor * new_scale - center + offset_delta
+	last_scale_target = center
 	set_view(new_scale, new_scroll, new_offset)
 
 func set_view(new_scale: float, new_scroll: Vector2, offset_v: Vector2 = Vector2.INF) -> void:
@@ -366,26 +391,30 @@ func set_view(new_scale: float, new_scroll: Vector2, offset_v: Vector2 = Vector2
 	var off: Vector2 = offset if offset_v == Vector2.INF else offset_v
 	container.position = -new_scroll + off
 	container.scale = Vector2(new_scale, new_scale)
-	_scale = new_scale
-	_scroll = new_scroll
+	content_scale = new_scale
+	scroll = new_scroll
 	if offset_v != Vector2.INF: offset = offset_v
 
 func update_container(new_scale: float, relative: Vector2 = Vector2.ZERO) -> void:
-	if _hard_bounds: new_scale = minmax_scale(new_scale)
-	var ratio: float = new_scale / _scale
-	var rel: Vector2 = _scroll + relative - offset
+	if hard_bounds: new_scale = minmax_scale(new_scale)
+	var ratio: float = new_scale / content_scale
+	var rel: Vector2 = scroll + relative - offset
 	offset = get_container_offset(new_scale)
 	var new_scroll: Vector2 = rel * ratio - relative + offset
-	if _hard_bounds: new_scroll = minmax_scroll(new_scroll, new_scale)
+	if hard_bounds: new_scroll = minmax_scroll(new_scroll, new_scale)
 	set_view(new_scale, new_scroll, offset)
 
 func force_standard() -> void:
-	var std: Dictionary = get_standard(_scale)
+	var std: Dictionary = get_standard(content_scale)
 	set_view(std.scale, std.scroll, get_container_offset(std.scale))
 
-func get_standard(scale_v: float) -> Dictionary:
-	var std_scale: float = minmax_scale(scale_v)
-	var std_scroll: Vector2 = minmax_scroll(_scroll, std_scale)
+func get_standard(scale_arg: float) -> Dictionary:
+	var std_scale: float = minmax_scale(scale_arg)
+	var ratio: float = std_scale / content_scale
+	var rel: Vector2 = scroll + last_scale_target - offset
+	var new_offset = get_container_offset(std_scale)
+	var std_scroll: Vector2 = rel * ratio - last_scale_target + new_offset
+	std_scroll = minmax_scroll(std_scroll, std_scale)
 	return {
 		"scale": std_scale,
 		"scroll": std_scroll
@@ -398,22 +427,19 @@ func _return_step(progress: float, from_scale: float, scale_delta: float, from_s
 	set_view(scale_value, scroll_value, offset_value)
 
 func to_standard(await_time: float) -> void:
-	if _hard_bounds: return
+	if hard_bounds: return
 	if tween && tween.is_valid() && tween.is_running():
 		tween.kill()
-	var std: Dictionary = get_standard(_scale)
+	var std: Dictionary = get_standard(content_scale)
 	tween = create_tween()
 	tween.tween_interval(await_time)
 	tween.chain().tween_method(
 		Callable(self, "_return_step").bind(
-			_scale,
-			std.scale - _scale,
-			_scroll,
-			std.scroll - _scroll,
-			offset,
-			get_container_offset(std.scale) - offset
+			content_scale, std.scale - content_scale,
+			scroll, std.scroll - scroll,
+			offset, get_container_offset(std.scale) - offset
 		),
-		0.0, 1.0, _returning_time
+		0.0, 1.0, returning_time
 	)
 
 func returning_stop() -> void:
@@ -422,19 +448,19 @@ func returning_stop() -> void:
 func update_scroll_on_real() -> void:
 	var container: Control = get_container()
 	if !container: return
-	_scroll = -container.position - get_container_offset(_scale)
+	scroll = -container.position - get_container_offset(content_scale)
 
-func set_scale_witch_anchor(value: float, point: Vector2) -> void:
+func set_scale_wtch_anchor(value: float, point: Vector2) -> void:
 	update_container(value, point)
-	var new_scroll: Vector2 = world_anchor * _scale - point + offset
-	if _hard_bounds: new_scroll = minmax_scroll(new_scroll, _scale)
-	set_view(_scale, new_scroll)
+	var new_scroll: Vector2 = world_anchor * content_scale - point + offset
+	if hard_bounds: new_scroll = minmax_scroll(new_scroll, content_scale)
+	set_view(content_scale, new_scroll)
 
 func screen_to_world(pos: Vector2) -> Vector2:
-	return (pos + _scroll) / _scale
+	return (pos + scroll) / content_scale
 
 func world_to_screen(pos: Vector2) -> Vector2:
-	return pos * _scale - _scroll
+	return pos * content_scale - scroll
 
 func get_container() -> Control:
 	if get_child_count() == 0: return null
@@ -445,10 +471,10 @@ func get_container() -> Control:
 func get_container_offset(scale_value: float) -> Vector2:
 	var container: Control = get_container()
 	if !container: return Vector2.ZERO
-	var sz: Vector2 = (container.size + _max_scroll_zone - _min_scroll_zone) * scale_value
+	var container_size: Vector2 = (container.size + max_scroll_zone - min_scroll_zone) * scale_value
 	return Vector2(
-		get_position_on_flag(container.size_flags_horizontal, size.x, sz.x),
-		get_position_on_flag(container.size_flags_vertical, size.y, sz.y)
+		get_position_on_flag(container.size_flags_horizontal, size.x, container_size.x),
+		get_position_on_flag(container.size_flags_vertical, size.y, container_size.y)
 	)
 
 func minmax_scroll(value: Vector2, scale_value: float) -> Vector2:
@@ -456,14 +482,14 @@ func minmax_scroll(value: Vector2, scale_value: float) -> Vector2:
 	var container_size: Vector2
 	if !container: container_size = Vector2.ZERO
 	else: container_size = container.size
-	var max_v: Vector2 = (container_size + _max_scroll_zone) * scale_value - size
-	var min_v: Vector2 = _min_scroll_zone * scale_value
+	var max_v: Vector2 = (container_size + max_scroll_zone) * scale_value - size
+	var min_v: Vector2 = min_scroll_zone * scale_value
 	max_v.x = max(min_v.x, max_v.x)
 	max_v.y = max(min_v.y, max_v.y)
 	return clamp_v2(value, min_v, max_v)
 
 func minmax_scale(value: float) -> float:
-	if _scale_on_content == ContentScale.NULL: return clamp(value, _min_scale, _max_scale)
+	if scale_on_content == ContentScale.NULL: return clamp(value, min_scale, max_scale)
 	var container: Control = get_container()
 	if !container: return 1.0
 	var container_size: Vector2 = container.size
@@ -471,9 +497,9 @@ func minmax_scale(value: float) -> float:
 	if container_size.y == 0: container_size.y = size.y
 	var ratio: Vector2 = size / container_size
 	var new_min: float
-	if _scale_on_content == ContentScale.ON_BIG_SIDE: new_min = min(ratio.x, ratio.y)
+	if scale_on_content == ContentScale.ON_BIG_SIDE: new_min = min(ratio.x, ratio.y)
 	else: new_min = max(ratio.x, ratio.y)
-	return clamp(value, max(new_min, _min_scale), _max_scale)
+	return clamp(value, max(new_min, min_scale), max_scale)
 
 func clamp_v2(value: Vector2, minv: Vector2, maxv: Vector2) -> Vector2:
 	return Vector2(
@@ -492,9 +518,8 @@ func set_pressed(button_index: int, value: bool) -> void:
 
 func get_new_position_on_index(index: int, raw_position: Vector2) -> Vector2:
 	if !touches.has(index): return to_local(raw_position)
-
 	var last_position: Vector2 = to_global(touches[index])
-	var smoothed: Vector2 = _drag_alpha * raw_position + (1.0 - _drag_alpha) * last_position
+	var smoothed: Vector2 = drag_alpha * raw_position + (1.0 - drag_alpha) * last_position
 	if (smoothed - last_position).length() < 2.5: return touches[index]
 	return to_local(smoothed)
 
